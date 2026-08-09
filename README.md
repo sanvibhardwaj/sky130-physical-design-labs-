@@ -1,4 +1,4 @@
-# sky130-physical-design-labs-
+# SKY130 Physical Design Labs
 
 A hands-on implementation of an **RTL-to-GDSII physical design flow** using [OpenLane](https://github.com/The-OpenROAD-Project/OpenLane) and the open-source [SKY130 PDK](https://github.com/google/skywater-pdk).
 
