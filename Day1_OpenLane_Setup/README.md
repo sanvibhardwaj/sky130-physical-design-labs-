@@ -63,14 +63,7 @@ docker: Error response from daemon: manifest for efabless/openlane:current not f
 
 ## Screenshots
 
-```text
-[Add screenshot: VirtualBox "Create Virtual Machine" — Use Existing Virtual Hard Disk File, pointing to openlane.vdi]
-[Add screenshot: `docker is aliased to ...` output revealing the alias]
-[Add screenshot: successful `\docker pull efabless/openlane:v0.21` — "Status: Image is up to date"]
-[Add screenshot: OpenLane ASCII-art banner + "Running interactively" after launching flow.tcl -interactive]
-[Add screenshot: GitHub Codespace "Active" status in the dashboard]
-[Add screenshot: Codespace terminal after successful load, showing /workspaces/vsd-openlane prompt]
-```
+
 
 ## Key Takeaway
 
