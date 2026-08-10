@@ -29,7 +29,7 @@ Output confirmed:
 - OpenLane version: v0.21
 - Running interactively
 
-![Docker pull and OpenLane interactive launch](images/image1.png)
+![Docker pull and OpenLane interactive launch](images/image1.jpeg)
 
 ### 3. Start Design Prep Run
 
@@ -72,4 +72,4 @@ Merged LEF generation completed successfully.
 
 Design prep stage completed with no errors.
 
-![Design prep run log — LEF merge and preparation complete](images/image2.png)
+![Design prep run log — LEF merge and preparation complete](images/image2.jpeg)
