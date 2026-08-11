@@ -98,23 +98,7 @@ Notice 0:     Created 14978 nets and 56051 connections.
 
 Component and net counts match the synthesis netlist exactly (14876 cells, 14978 nets) — confirming a clean handoff from synthesis to floorplanning.
 
-### 6. Power Distribution Network (PDN) Generation
-
-Floorplan stage also generates the power grid (VPWR/VGND stripes and rails):
-
-![PDN generation log](images/image10.png)
-
-```
-[INFO PSM-0031] Number of nodes on net VPWR = 20600.
-[INFO PSM-0037] G matrix created successfully.
-[INFO PSM-0031] Number of nodes on net VGND = 19223.
-[INFO PSM-0037] G matrix created successfully.
-[INFO]: PDN generation was successful.
-```
-
-Several `[WARNING PSM-0030]` messages appeared where initial Vsrc stripe locations didn't align to the grid — OpenROAD automatically snapped each to the nearest valid power stripe. These are expected/non-blocking warnings, not errors.
-
-### 7. View the Floorplan in Magic
+### 6. View the Floorplan in Magic
 
 Opened the generated floorplan layout in Magic for visual inspection:
 
@@ -135,7 +119,26 @@ magic -T /home/vsduser/Desktop/work/tools/openlane_working_dir/pdks/sky130A/libs
 
 The layout shows the die boundary with standard-cell placement rows (vertical tap/decap columns visible), matching the row/step values from the DEF file.
 
+### 7. Inspect an Individual Standard Cell
+
+Zoomed into a single placed cell to inspect its instance name and cell type:
+
+![Zoomed-in view of a single standard cell in the floorplan](images/image10.png)
+
+The zoomed view shows a `tapvpwrvgnd` (tap cell providing VPWR/VGND connections) with its physical instance labels (`PHY_3500`, `PHY_3451`) visible in the layout.
+
+Selected the cell (`S`) and queried it from the Magic **tkcon** console using the `what` command:
+
+```tcl
+% what
+Selected subcell(s)
+    Instance "PHY_3451" of cell "sky130_fd_sc_hd__tapvpwrvgnd_1"
+```
+
+![tkcon console — identifying the selected cell](images/image11.png)
+
+This confirms the selected cell is a `sky130_fd_sc_hd__tapvpwrvgnd_1` tap cell — used to provide well-tap and substrate connections at regular intervals across the floorplan, as required by the SKY130 DRC rules.
+
 ### 8. Result
 
 Floorplan stage completed successfully — die area, rows, I/O pin placement, and the power distribution network were all generated and verified against the synthesis netlist before proceeding to placement.
-
