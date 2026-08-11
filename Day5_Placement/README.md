@@ -98,30 +98,6 @@ magic -T /home/vsduser/Desktop/work/tools/openlane_working_dir/pdks/sky130A/libs
 
 Compared to the floorplan stage (empty rows with only tap/decap cells), the layout is now densely packed with logic cells across the entire core area.
 
-### 7. Inspect an Individual Placed Cell
-
-Zoomed into a small region to see individual placed cells and their instance names:
-
-```
-Click left, then right → box the region to zoom into
-Z → zoom in
-S → select a cell
-```
-
-![Zoomed-in view of individual placed standard cells](images/image13.png)
-
-Selected instance `_16383_` and queried it from the tkcon console:
-
-```tcl
-% what
-Selected subcell(s):
-    Instance "_16383_" of cell "sky130_fd_sc_hd__inv_2"
-```
-
-![tkcon console — identifying the selected placed cell](images/image14.png)
-
-Confirms `_16383_` is a `sky130_fd_sc_hd__inv_2` (inverter) cell, placed and legalized onto its row alongside neighboring `tapvpwrvgnd`, `clkbuf_4`, and other standard cells visible in the zoomed view.
-
 ### 8. Result
 
 Placement completed successfully — global placement converged to a low-wirelength initial layout, and detailed placement legalized all cells onto valid rows with only a 2% increase in wirelength (774,890 u vs. 762,959.5 u original HPWL). Design ready to proceed to Clock Tree Synthesis (CTS).
