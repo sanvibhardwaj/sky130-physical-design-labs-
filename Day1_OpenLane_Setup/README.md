@@ -61,9 +61,6 @@ docker: Error response from daemon: manifest for efabless/openlane:current not f
 
 **Resolution:** Opening the same Codespace in an **Incognito/Private browser window** resolved the connection issue immediately.
 
-## Screenshots
-
------------------- to be added
 
 ## Key Takeaway
 
