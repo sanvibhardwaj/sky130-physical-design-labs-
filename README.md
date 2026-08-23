@@ -1,8 +1,8 @@
 # VLSI Physical Design & RTL-to-GDSII Flow using OpenLane
 
-(images/docker_pull_openlane_interactive.jpeg)
-
 A hands-on implementation of an RTL-to-GDSII physical design flow using [OpenLane](https://github.com/The-OpenROAD-Project/OpenLane) and the open-source [SKY130 PDK](https://github.com/google/skywater-pdk).
+
+![ OpenLane flow](images/openlane-flow.webp)
 
 This repository documents actual tool execution, environment setup, debugging, and physical-design observations made while running real designs (`spm`, `picorv32a`) through the OpenLane flow — not just lecture notes.
 
@@ -396,7 +396,7 @@ magic -T /home/vsduser/Desktop/work/tools/openlane_working_dir/pdks/sky130A/libs
 Compared to the floorplan stage (empty rows with only tap/decap cells), the layout is now densely packed with logic cells across the entire core area.
 
 
-[Placement layout view in Magic](images/placement_layout_magic.jpeg)
+![Placement layout view in Magic](images/placement_layout_magic.jpeg)
 
 **6. Result**
 
