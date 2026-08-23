@@ -452,6 +452,7 @@ cp sky130A.tech /home/vsduser/Desktop/work/tools/openlane_working_dir/openlane/v
 cd ~/Desktop/work/tools/openlane_working_dir/openlane/vsdstdcelldesign
 magic -T sky130A.tech sky130_inv.mag &
 ```
+![ inverter layout](images/inverter_layout.jpeg)
 
 This opens the inverter layout with DRC checking enabled, showing the standard I/O ports (`A`, `Y`) and supply rails (`VPWR`, `VGND`) as laid out in silicon — poly, diffusion, and metal1 layers connecting the NMOS/PMOS pair that make up the inverter.
 
@@ -493,11 +494,37 @@ The raw extracted netlist only contains the transistor-level circuit. To actuall
 ```bash
 vim sky130_inv.spice
 ```
-
 Final simulation-ready netlist:
 
-![sky130_inv.spice — edited netlist with supply sources, input pulse, and simulation control added](images/ngspice_netlist_vim_edit.jpeg)
+```spice
+* SPICE3 file created from sky130_vsdinv.ext - technology: sky130A
 
+.option scale=0.01u
+.include ./libs/pshort.lib
+.include ./libs/nshort.lib
+
+//.subckt sky130_vsdinv A Y VPWR VGND
+
+M0 Y A VGND VGND nshort_model.0 w=35 l=23
++  ad=1435 pd=152 as=1365 ps=148
+M1 Y A VPWR VPWR pshort_model.0 w=37 l=23
++  ad=1443 pd=152 as=1517 ps=156
+VSS VGND 0 0V
+VDD VPWR 0 3.3V
+Va A VGND PULSE(0V 3.3V 0 0.1ns 0.1ns 2ns 4ns)
+C0 VPWR Y 0.117fF
+C1 A Y 0.0754fF
+C2 A VPWR 0.0774fF
+C3 Y VGND 0.279fF
+C4 A VGND 2fF
+C5 VPWR VGND 0.781fF
+//.ends
+.tran 1n 20n
+.control
+run
+.endc
+.end
+```
 
 ## 5. Run the Simulation
 
@@ -547,16 +574,76 @@ t_pd = t(output @ 50%) − t(input @ 50%)
 - The PMOS (`M1`, W=0.37µm) is sized slightly wider than the NMOS (`M0`, W=0.35µm), compensating for the lower hole mobility so pull-up and pull-down drive strength are reasonably balanced
 - Propagation delay, measured at the 50% VDD threshold, characterizes how fast this cell can switch — critical for timing closure once it's integrated into the picorv32a library
 
-## Connection to Next Stage
-
-With functional and timing characterization complete, the next step is verifying the layout is manufacturable — running DRC (Design Rule Check) on `sky130_inv.mag` in Magic to confirm it meets Sky130's fabrication rules before this cell is trusted enough to be added to the standard-cell library used by the PnR flow.
-
 ---
 
 ## 7. DRC on Custom Cell
 
-`[TO BE FILLED]` — pending.
+### Objective
 
+Confirm the custom inverter layout (`sky130_inv.mag`) meets Sky130's design rules before it's added to the standard-cell library and re-integrated into the picorv32a design.
+
+### Running the Check
+
+```bash
+magic -T sky130A.tech sky130_inv.mag &
+```
+
+```tcl
+% drc check
+% drc why
+Transistor width < 0.42um (diff/tap.2)
+% drc count total
+Cell sky130_vsdinv has 4 error tiles.
+```
+
+**What this showed:** one violation type across 4 error tiles — the NMOS transistor's diffusion width is below Sky130's 0.42µm minimum. This traces back to the SPICE netlist from Section 6 (`M0 ... w=35 l=23` with `scale=0.01u` → W = 0.35µm), confirming the layout and netlist agree on the same undersized transistor.
+
+Selecting the violating device confirmed the exact dimensions:
+
+```tcl
+% what
+Selected mask layers:
+    nmos
+
+% box
+microns:  0.230 x 0.350   ( 0.490, 0.410), ( 0.720, 0.760)
+```
+
+0.230µm = channel length, 0.350µm = channel width — the width needs to grow to at least 0.42µm.
+
+### Fixing the Violation
+
+The general approach for a minimum-width violation like this: grow the diffusion layer symmetrically on both sides of its center, rather than extending only one edge — this keeps the transistor properly centered relative to the poly gate and neighboring well/spacing, avoiding new violations from an uneven edit.
+
+```tcl
+% box grow n 0.035um
+% box grow s 0.035um
+% paint ndiff
+```
+
+After painting, the DRC check is re-run on the **whole cell** (not just the edited region) to confirm the fix is complete and hasn't introduced any new spacing or overhang violations elsewhere:
+
+```tcl
+% drc check
+% drc why
+% drc count total
+```
+
+```tcl
+% drc check
+% drc why
+No errors found.
+% drc count total
+Cell sky130_vsdinv has 0 error tiles.
+```
+
+DRC-clean — the symmetric growth resolved the width violation without introducing new spacing or overhang violations.
+
+### Key Takeaways
+
+- A DRC width violation traces directly back to the transistor's actual sizing — the layout and the SPICE netlist describe the same physical geometry
+- Growing a transistor dimension symmetrically (both edges) rather than one-sided keeps it centered relative to the gate and surrounding layers, avoiding secondary spacing/overhang violations
+- DRC must be re-checked against the whole cell after any edit, not just the local region that was changed
 ---
 
 ## 8. 16-Mask CMOS Fabrication Process
