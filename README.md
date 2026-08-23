@@ -1,5 +1,7 @@
 # VLSI Physical Design & RTL-to-GDSII Flow using OpenLane
 
+(images/docker_pull_openlane_interactive.jpeg)
+
 A hands-on implementation of an RTL-to-GDSII physical design flow using [OpenLane](https://github.com/The-OpenROAD-Project/OpenLane) and the open-source [SKY130 PDK](https://github.com/google/skywater-pdk).
 
 This repository documents actual tool execution, environment setup, debugging, and physical-design observations made while running real designs (`spm`, `picorv32a`) through the OpenLane flow — not just lecture notes.
@@ -7,19 +9,6 @@ This repository documents actual tool execution, environment setup, debugging, a
 Primary environment: the PnR flow itself is run locally, inside a VirtualBox Ubuntu VM with OpenLane/Docker set up on the machine directly. A GitHub Codespace was separately set up and verified as a working backup/alternative environment. This GitHub repository is used only to document and upload results after each run — it does not host the actual flow execution.
 
 ## Physical Design Flow
-
-```mermaid
-flowchart TD
-    A[RTL - Verilog] --> B[Synthesis<br/>Yosys + OpenSTA]
-    B --> C[Floorplanning & Power Planning<br/>OpenROAD]
-    C --> D[Placement<br/>RePlAce + OpenDP]
-    D --> E[Standard Cell Design<br/>Ngspice + Magic DRC]
-    E --> F[Integration & Re-run<br/>custom cell added to library]
-    F --> G[Clock Tree Synthesis<br/>OpenROAD TritonCTS]
-    G --> H[Routing<br/>OpenROAD TritonRoute]
-    H --> I[Sign-off<br/>DRC / LVS / STA]
-    I --> J[GDSII]
-```
 
 Each stage feeds directly into the next:
 
@@ -147,7 +136,7 @@ OpenLane version: v0.21
 Running interactively
 ```
 
-![Docker pull and OpenLane interactive launch](images/setup/docker_pull_openlane_interactive.png)
+![Docker pull and OpenLane interactive launch](images/docker_pull_openlane_interactive.jpeg)
 
 **3. Load the OpenLane Package and Start Design Prep**
 
@@ -307,9 +296,9 @@ magic -T /home/vsduser/Desktop/work/tools/openlane_working_dir/pdks/sky130A/libs
   def read picorv32a.floorplan.def &
 ```
 
-![Floorplan layout view in Magic](images/floorplan/floorplan_layout_magic.png)
-
 The layout shows the die boundary with standard-cell placement rows (vertical tap/decap columns visible), matching the row/step values from the DEF file.
+
+![Floorplan layout view in Magic](images/floorplan_layout_magic.jpeg)
 
 Zoomed into a single placed cell and queried it via the tkcon console `what` command — confirmed a `sky130_fd_sc_hd__tapvpwrvgnd_1` tap cell (`PHY_3451`), used to provide well-tap and substrate connections at regular intervals across the floorplan, as required by SKY130 DRC rules:
 
@@ -406,9 +395,8 @@ magic -T /home/vsduser/Desktop/work/tools/openlane_working_dir/pdks/sky130A/libs
 
 Compared to the floorplan stage (empty rows with only tap/decap cells), the layout is now densely packed with logic cells across the entire core area.
 
-<!-- Optional: add a screenshot here if available, e.g.
-![Placement layout view in Magic](images/placement/placement_layout_magic.png)
--->
+
+[Placement layout view in Magic](images/placement_layout_magic.jpeg)
 
 **6. Result**
 
@@ -508,7 +496,7 @@ vim sky130_inv.spice
 
 Final simulation-ready netlist:
 
-![sky130_inv.spice — edited netlist with supply sources, input pulse, and simulation control added](images/standard_cell/ngspice_netlist_vim_edit.png)
+![sky130_inv.spice — edited netlist with supply sources, input pulse, and simulation control added](images/ngspice_netlist_vim_edit.jpeg)
 
 
 ## 5. Run the Simulation
@@ -532,7 +520,7 @@ ngspice sky130_inv.spice
 ngspice 1 -> plot y a
 ```
 
-![sky130_vsdinv transient waveform — input A (blue) vs output Y (orange)](images/standard_cell/ngspice_transient_waveform.png)
+![sky130_vsdinv transient waveform — input A (blue) vs output Y (orange)](images/ngspice_transient_waveform.jpeg)
 
 The output (Y) correctly tracks the inverse of the input (A) across all pulse cycles in the 20ns window, with a visible propagation delay between each input edge and the corresponding output edge.
 
