@@ -655,7 +655,7 @@ DRC-clean — the symmetric growth resolved the width violation without introduc
 3. Carry the design through synthesis/floorplan/placement/cts/routing/GDSII 
 ---
  
-### Generate the LEF for the custom cell in Magic
+### 1. Generate the LEF for the custom cell in Magic
  
 The custom cell layout (`sky130_vsdinv.mag`) was opened in Magic using the SkyWater 130 tech file, and its abstract (LEF) view was generated from the `tkcon` console.
  
@@ -698,7 +698,7 @@ magic -T sky130A.tech sky130_vsdinv.mag &
  
 ---
  
-### Copy the custom LEF and standard-cell libraries into the design
+### 2. Copy the custom LEF and standard-cell libraries into the design
  
 The generated LEF was copied into the `picorv32a` design's `src` folder so OpenLane can pick it up as an extra LEF:
  
@@ -725,7 +725,7 @@ cp sky130_fd_sc_hd__* \
  
 ---
  
-### Point the picorv32a `config.tcl` at the custom cell / libraries
+### 3. Point the picorv32a `config.tcl` at the custom cell / libraries
  
 `designs/picorv32a/config.tcl` was edited so that:
 - The synthesis/STA libraries used are the ones just copied in.
@@ -760,7 +760,7 @@ if { [file exists $filename] == 1 } {
 ---
  
  
-### Launch OpenLane and prep the design
+### 4. Launch OpenLane and prep the design
  
 ```bash
 docker pull efabless/openlane:v0.21
@@ -779,7 +779,7 @@ OpenLane sources `designs/picorv32a/config.tcl` and reports the merged LEF (stan
  
 ---
  
-### Setting the synthesis strategy variables
+### 5. Setting the synthesis strategy variables
  
 To push the custom-cell-integrated design toward better timing closure, the following environment variables were set **inside the interactive OpenLane session**, before running synthesis:
  
@@ -800,7 +800,7 @@ What each of these does:
  
 ---
  
-### Final Synthesis Results
+### 6. Final Synthesis Results
  
 Only the final synthesis run (with the strategy/fanout/sizing settings above) was kept. Its reports live under:
  
@@ -850,7 +850,7 @@ tns 0.00
 ```
  
  
-## Floorplan and Placement — verifying the custom cell was placed
+### 7. Floorplan and Placement — verifying the custom cell was placed
  
 After synthesis, the flow was continued through floorplan and placement:
  
