@@ -646,16 +646,239 @@ DRC-clean — the symmetric growth resolved the width violation without introduc
 - DRC must be re-checked against the whole cell after any edit, not just the local region that was changed
 ---
 
-## 8. 16-Mask CMOS Fabrication Process
-
-`[TO BE FILLED]` — pending (theory-only, per workshop coverage).
-
+## Integrating a Custom Standard Cell (sky130_vsdinv) into the OpenLane Flow — picorv32a
+ 
+### Objective 
+ 
+1. Extract a LEF view of a custom-designed inverter standard cell (`sky130_vsdinv`) from its Magic layout.
+2. Integrate that custom cell (and the `sky130_fd_sc_hd` library `.lib` files) into the OpenLane `picorv32a` design.
+3. Carry the design through synthesis/floorplan/placement/cts/routing/GDSII 
 ---
+ 
+### Generate the LEF for the custom cell in Magic
+ 
+The custom cell layout (`sky130_vsdinv.mag`) was opened in Magic using the SkyWater 130 tech file, and its abstract (LEF) view was generated from the `tkcon` console.
+ 
+```tcl
+% lef write
+```
+ 
+Console output confirmed the LEF was generated successfully for the cell:
+ 
+```
+Generating LEF output sky130_vsdinv.lef for cell sky130_vsdinv:
+Diagnostic: Write LEF header for cell sky130_vsdinv
+Diagnostic: Writing LEF output for cell sky130_vsdinv
+Diagnostic: Scale value is 0.010000
+```
+ 
+This produced `sky130_vsdinv.lef` in the working directory (`~/Desktop/work/tools/openlane_working_dir/openlane/vsdstdcelldesign`), alongside the existing cell files:
+ 
+```
+$ ls -ltr
+README.md
+LICENSE
+Images/
+extras/
+libs/
+sky130_inv.mag
+sky130A.tech
+sky130_inv.ext
+sky130_inv.spice
+sky130_vsdinv.mag
+sky130_vsdinv.lef      <-- newly generated
+```
+ 
+The layout was opened for reference/verification with:
+ 
+```bash
+magic -T sky130A.tech sky130_inv.mag &
+magic -T sky130A.tech sky130_vsdinv.mag &
+```
+ 
+---
+ 
+### Copy the custom LEF and standard-cell libraries into the design
+ 
+The generated LEF was copied into the `picorv32a` design's `src` folder so OpenLane can pick it up as an extra LEF:
+ 
+```bash
+cp sky130_vsdinv.lef \
+   /home/vsduser/Desktop/work/tools/openlane_working_dir/openlane/designs/picorv32a/src
+```
+ 
+The `.lib` timing files (fast/slow/typical) from the `libs/` folder were also copied into the same design `src` folder, so the custom cell's timing views are available to synthesis:
+ 
+```bash
+cd ~/Desktop/work/tools/openlane_working_dir/openlane/vsdstdcelldesign/libs
+ls -ltr
+# pshort.lib
+# nshort.lib
+# sky130A.tech
+# sky130_fd_sc_hd__fast.lib
+# sky130_fd_sc_hd__slow.lib
+# sky130_fd_sc_hd__typical.lib
+ 
+cp sky130_fd_sc_hd__* \
+   /home/vsduser/Desktop/work/tools/openlane_working_dir/openlane/designs/picorv32a/src
+```
+ 
+---
+ 
+### Point the picorv32a `config.tcl` at the custom cell / libraries
+ 
+`designs/picorv32a/config.tcl` was edited so that:
+- The synthesis/STA libraries used are the ones just copied in.
+- `EXTRA_LEFS` picks up any additional LEF (including `sky130_vsdinv.lef`) placed in `src/`.
+```tcl
+# Design
+set ::env(DESIGN_NAME) "picorv32a"
+ 
+set ::env(VERILOG_FILES) "./designs/picorv32a/src/picorv32a.v"
+set ::env(SDC_FILE) "./designs/picorv32a/src/picorv32a.sdc"
+ 
+set ::env(CLOCK_PERIOD) "24.730"
+set ::env(CLOCK_PORT) "clk"
+ 
+set ::env(CLOCK_NET) $::env(CLOCK_PORT)
+ 
+set ::env(LIB_SYNTH)   "$::env(OPENLANE_ROOT)/designs/picorv32a/src/sky130_fd_sc_hd__typical.lib"
+set ::env(LIB_FASTEST) "$::env(OPENLANE_ROOT)/designs/picorv32a/src/sky130_fd_sc_hd__fast.lib"
+set ::env(LIB_SLOWEST) "$::env(OPENLANE_ROOT)/designs/picorv32a/src/sky130_fd_sc_hd__slow.lib"
+set ::env(LIB_TYPICAL) "$::env(OPENLANE_ROOT)/designs/picorv32a/src/sky130_fd_sc_hd__typical.lib"
+ 
+set ::env(EXTRA_LEFS) [glob $::env(OPENLANE_ROOT)/designs/$::env(DESIGN_NAME)/src/*.lef]
+ 
+set filename $::env(OPENLANE_ROOT)/designs/$::env(DESIGN_NAME)/$::env(PDK)_$::env(STD_CELL_LIBRARY)
+if { [file exists $filename] == 1 } {
+    source $filename
+}
+```
+ 
+> Note: `CLOCK_PERIOD` is `25.000` ns in this run, i.e. a 40 MHz target clock.
+ 
+---
+ 
+ 
+### Launch OpenLane and prep the design
+ 
+```bash
+docker pull efabless/openlane:v0.21
+docker run ...   # enter container
+./flow.tcl -interactive
+```
+ 
+Inside the interactive Tcl shell:
+ 
+```tcl
+% package require openlane 0.9
+% prep -design picorv32a -tag finalrun2
+```
+ 
+OpenLane sources `designs/picorv32a/config.tcl` and reports the merged LEF (standard cell LEF + the custom `sky130_vsdinv.lef`) being prepared for the run.
+ 
+---
+ 
+### Setting the synthesis strategy variables
+ 
+To push the custom-cell-integrated design toward better timing closure, the following environment variables were set **inside the interactive OpenLane session**, before running synthesis:
+ 
+```tcl
+set ::env(SYNTH_STRATEGY) "DELAY 0"
+set ::env(SYNTH_MAX_FANOUT) 4
+set ::env(SYNTH_SIZING) 1
+```
+ 
+What each of these does:
+ 
+- **`SYNTH_STRATEGY "DELAY 0"`** — tells `yosys`/`abc` to optimize the mapped netlist for **delay** rather than area (OpenLane's default strategy is area-oriented). This generally increases cell count/area slightly but improves timing.
+- **`SYNTH_MAX_FANOUT 4`** — caps the max fanout any synthesized gate is allowed to drive to 4 (down from the default of 10). Lower fanout means less capacitive loading per driver, which helps meet timing (less transition-time related slack), at the cost of extra buffering/cell count.
+- **`SYNTH_SIZING 1`** — enables ABC's cell-sizing / gate-sizing optimization pass, letting synthesis pick larger-drive-strength cells where useful to fix timing, instead of using default-sized cells everywhere.
+```tcl
+% run_synthesis
+```
+ 
+---
+ 
+### Final Synthesis Results
+ 
+Only the final synthesis run (with the strategy/fanout/sizing settings above) was kept. Its reports live under:
+ 
+```
+designs/picorv32a/runs/<tag>/reports/synthesis/
+```
 
-## 9. Integration & Re-run (custom cell added to library)
-
-`[TO BE FILLED]` — pending. Will cover the config/library diff and command log for re-running synthesis → floorplan → placement with the custom cell in the library, plus any result deltas vs. Sections 2–5.
-
+ 
+### Area — `1-yosys_0.stat.rpt`
+ 
+```
+Chip area for module 'picorv32a': 196832.528000
+```
+ 
+**Area = 196832.528 µm²**
+ 
+### Max slew / capacitance — `2-opensta.slew.rpt`
+ 
+| Pin | Limit | Cap | Slack |
+|-----|-------|-----|-------|
+| `_36261_/X` | 0.23 | 0.63 | **-0.40 (VIOLATED)** |
+| `_36260_/X` | 0.23 | 0.42 | **-0.19 (VIOLATED)** |
+ 
+Two nets exceed the max-capacitance limit at this stage — driven by high fanout/loading on those two nets, flagged as slew (max capacitance) violations.
+ 
+### Setup / Hold timing — raw synthesized netlist (stage `2`, before resizer)
+ 
+```
+hold   - 0.24  slack (MET)
+setup  9.12  slack (MET)
+```
+ 
+### Setup / Hold timing — after resizer (stage `12`, final synthesis-stage netlist)
+ 
+This is where `SYNTH_STRATEGY`, `SYNTH_MAX_FANOUT`, and `SYNTH_SIZING` actually take effect (buffering/fanout fixing/gate sizing applied by the resizer):
+ 
+```
+hold  0.22  slack (MET)
+setup 11.10 slack (MET)
+```
+ 
+### Worst/Total Negative Slack
+ 
+```
+wns 0.00
+tns 0.00
+```
+ 
+ 
+## Floorplan and Placement — verifying the custom cell was placed
+ 
+After synthesis, the flow was continued through floorplan and placement:
+ 
+```tcl
+% run_floorplan
+% run_placement
+```
+ 
+The resulting placement `DEF` was opened in Magic (via `tkcon`) to confirm the custom `sky130_vsdinv` cell was placed correctly among the standard `sky130_fd_sc_hd` cells:
+ 
+```bash
+cd runs/<tag>/results/placement
+magic -T /path/to/sky130A.tech lef read ../../tmp/merged.lef def read picorv32a.placement.def &
+```
+ 
+In the Magic layout window, selecting one of the placed instances confirmed:
+ 
+```tcl
+% what
+Selected subcell(s):
+    Instance "_32980_" of cell "sky130_vsdinv"
+```
+![Magic layout window](images/magic_layout.jpeg)
+ 
+This confirms `sky130_vsdinv` was successfully:
+1. Recognized by OpenLane as a valid extra LEF/cell.
+2. Included by synthesis in the mapped netlist.
+3. Placed correctly in the floorplan alongside the standard `sky130_fd_sc_hd` cells.
 ---
 
 ## 10. Clock Tree Synthesis (CTS)
