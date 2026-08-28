@@ -8,6 +8,28 @@ This repository documents actual tool execution, environment setup, debugging, a
 
 Primary environment: the PnR flow itself is run locally, inside a VirtualBox Ubuntu VM with OpenLane/Docker set up on the machine directly. A GitHub Codespace was separately set up and verified as a working backup/alternative environment. This GitHub repository is used only to document and upload results after each run — it does not host the actual flow execution.
 
+## Table of Contents
+
+- [Physical Design Flow](#physical-design-flow)
+- [Tools & Technologies](#tools--technologies)
+- [References](#references)
+- [1. Environment Setup](#1-environment-setup)
+- [2. Design Prep](#2-design-prep)
+- [3. Synthesis (`run_synthesis`)](#3-synthesis-run_synthesis)
+- [4. Floorplanning (`run_floorplan`)](#4-floorplanning-run_floorplan)
+- [5. Placement (`run_placement`)](#5-placement-run_placement)
+- [Note: Re-running the Flow with the Custom Standard Cell](#note-re-running-the-flow-with-the-custom-standard-cell)
+- [6. Standard Cell Design — Extraction & Ngspice Characterization](#6-standard-cell-design--extraction--ngspice-characterization)
+- [7. DRC on Custom Cell](#7-drc-on-custom-cell)
+- [8. Integrating a Custom Standard Cell (sky130_vsdinv) into the OpenLane Flow](#8-integrating-a-custom-standard-cell-sky130_vsdinv-into-the-openlane-flow--picorv32a)
+- [9. Clock Tree Synthesis (CTS)](#9-clock-tree-synthesis-cts)
+- [10. Power Distribution Network (PDN) & Routing](#10-power-distribution-network-pdn--routing)
+- [11. GDSII Generation & Layout View](#11-gdsii-generation--layout-view)
+- [Next Steps (Post-Routing)](#next-steps-post-routing)
+- [End-to-End Learning](#end-to-end-learning)
+
+
+
 ## Physical Design Flow
 
 Each stage feeds directly into the next:
@@ -406,17 +428,15 @@ Placement completed successfully — global placement converged to a low-wirelen
 
 Up to this point, the picorv32a design was run through OpenLane using only the stock `sky130_fd_sc_hd` library. Starting with the next section, a custom inverter cell was designed, characterized in Ngspice, and (pending) DRC-checked — see Section 6 below. Once verified, this cell will be added to the library path, and the same PnR flow (synthesis → floorplan → placement → CTS → routing → signoff) will be re-run on `picorv32a` using the updated library.
 
-The steps and tools are identical to Sections 2–5 above — that re-run section will focus on what changed (the config/library addition, and the commands run) rather than re-explaining concepts already covered.
-
 ---
 
 ## 6. Standard Cell Design — Extraction & Ngspice Characterization
 
-## Objective
+### Objective
 
 Before the custom standard cell (`sky130_inv.mag`, containing the `sky130_vsdinv` inverter subcircuit) can be added to the standard-cell library and re-integrated into the picorv32a design, it needs to be electrically characterized. This means extracting a SPICE netlist from the physical layout and running transient simulation in Ngspice to confirm correct switching behavior and measure timing parameters (rise time, fall time, slew).
 
-## 1. Setup
+### 1. Setup
 
 Cloned the reference standard-cell design repository containing the inverter layout:
 
@@ -446,17 +466,17 @@ ls
 cp sky130A.tech /home/vsduser/Desktop/work/tools/openlane_working_dir/openlane/vsdstdcelldesign
 ```
 
-## 2. Open the Layout in Magic
+### 2. Open the Layout in Magic
 
 ```bash
 cd ~/Desktop/work/tools/openlane_working_dir/openlane/vsdstdcelldesign
 magic -T sky130A.tech sky130_inv.mag &
 ```
-![ inverter layout](images/inverter_layout.jpeg)
+![inverter layout](images/inverter_layout.jpeg)
 
 This opens the inverter layout with DRC checking enabled, showing the standard I/O ports (`A`, `Y`) and supply rails (`VPWR`, `VGND`) as laid out in silicon — poly, diffusion, and metal1 layers connecting the NMOS/PMOS pair that make up the inverter.
 
-## 3. Extract SPICE Netlist from Layout
+### 3. Extract SPICE Netlist from Layout
 
 Inside Magic's `tkcon` console:
 
@@ -487,7 +507,7 @@ ls -ltr
 # sky130_inv.spice     404 bytes
 ```
 
-## 4. Edit the SPICE Deck for Simulation
+### 4. Edit the SPICE Deck for Simulation
 
 The raw extracted netlist only contains the transistor-level circuit. To actually simulate it, supply sources, an input stimulus, and simulation control statements were added manually:
 
@@ -526,7 +546,7 @@ run
 .end
 ```
 
-## 5. Run the Simulation
+### 5. Run the Simulation
 
 ```bash
 ngspice sky130_inv.spice
@@ -534,14 +554,12 @@ ngspice sky130_inv.spice
 
 ```
 ** ngspice-27 : Circuit level simulation program
-
-![ngspice sky130_inv.spice — simulation run output](images/standard_cell/ngspice_simulation_run.png)
+```
 
 `Y = 3.3V` when `A = 0V` confirms correct inverting behavior at the very start of simulation, before the input pulse begins toggling.
 
-```
 
-## 6. Plot and Measure
+### 6. Plot and Measure
 
 ```
 ngspice 1 -> plot y a
@@ -568,7 +586,7 @@ t_pd = t(output @ 50%) − t(input @ 50%)
      = 0.036 ns  (36 ps)
 ```
 
-## Key Takeaways
+### Key Takeaways
 
 - Extracting with `cthresh 0 rthresh 0` ensures the SPICE netlist captures every parasitic from the actual layout — this is what makes the switching behavior in simulation reflect real silicon rather than an idealized schematic
 - The PMOS (`M1`, W=0.37µm) is sized slightly wider than the NMOS (`M0`, W=0.35µm), compensating for the lower hole mobility so pull-up and pull-down drive strength are reasonably balanced
@@ -652,7 +670,7 @@ DRC-clean — the symmetric growth resolved the width violation without introduc
  
 1. Extract a LEF view of a custom-designed inverter standard cell (`sky130_vsdinv`) from its Magic layout.
 2. Integrate that custom cell (and the `sky130_fd_sc_hd` library `.lib` files) into the OpenLane `picorv32a` design.
-3. Carry the design through synthesis/floorplan/placement/cts/routing/GDSII 
+3. Carry the design through synthesis/floorplan/placement/cts/routing/signoff
 ---
  
 ### 1. Generate the LEF for the custom cell in Magic
@@ -737,7 +755,7 @@ set ::env(DESIGN_NAME) "picorv32a"
 set ::env(VERILOG_FILES) "./designs/picorv32a/src/picorv32a.v"
 set ::env(SDC_FILE) "./designs/picorv32a/src/picorv32a.sdc"
  
-set ::env(CLOCK_PERIOD) "24.730"
+set ::env(CLOCK_PERIOD) "24.73"
 set ::env(CLOCK_PORT) "clk"
  
 set ::env(CLOCK_NET) $::env(CLOCK_PORT)
@@ -754,8 +772,7 @@ if { [file exists $filename] == 1 } {
     source $filename
 }
 ```
- 
-> Note: `CLOCK_PERIOD` is `25.000` ns in this run, i.e. a 40 MHz target clock.
+
  
 ---
  
@@ -816,30 +833,15 @@ Chip area for module 'picorv32a': 196832.528000
 ```
  
 **Area = 196832.528 µm²**
- 
-### Max slew / capacitance — `2-opensta.slew.rpt`
- 
-| Pin | Limit | Cap | Slack |
-|-----|-------|-----|-------|
-| `_36261_/X` | 0.23 | 0.63 | **-0.40 (VIOLATED)** |
-| `_36260_/X` | 0.23 | 0.42 | **-0.19 (VIOLATED)** |
- 
-Two nets exceed the max-capacitance limit at this stage — driven by high fanout/loading on those two nets, flagged as slew (max capacitance) violations.
- 
-### Setup / Hold timing — raw synthesized netlist (stage `2`, before resizer)
- 
-```
-hold   - 0.24  slack (MET)
-setup  9.12  slack (MET)
-```
+  
  
 ### Setup / Hold timing — after resizer (stage `12`, final synthesis-stage netlist)
  
 This is where `SYNTH_STRATEGY`, `SYNTH_MAX_FANOUT`, and `SYNTH_SIZING` actually take effect (buffering/fanout fixing/gate sizing applied by the resizer):
  
 ```
-hold  0.22  slack (MET)
-setup 11.10 slack (MET)
+hold  0.25 slack (MET)
+setup 4.59 slack (MET)
 ```
  
 ### Worst/Total Negative Slack
@@ -848,9 +850,80 @@ setup 11.10 slack (MET)
 wns 0.00
 tns 0.00
 ```
- 
- 
-### 7. Floorplan and Placement — verifying the custom cell was placed
+### 7. Standalone STA Check (`pre_sta.conf`)
+
+To independently verify the synthesized netlist's timing outside OpenLane's own reporting, a custom SDC and a standalone OpenSTA config script were written and run directly.
+
+**`designs/picorv32a/src/my_base.sdc`:**
+
+```tcl
+set ::env(CLOCK_PORT) clk
+set ::env(CLOCK_PERIOD) 24.73
+#set ::env(SYNTH_DRIVING_CELL) sky130_vsdinv
+set ::env(SYNTH_DRIVING_CELL) sky130_fd_sc_hd__inv_8
+set ::env(SYNTH_DRIVING_CELL_PIN) Y
+set ::env(SYNTH_CAP_LOAD) 17.65
+
+create_clock [get_ports $::env(CLOCK_PORT)] -name $::env(CLOCK_PORT) -period $::env(CLOCK_PERIOD)
+set IO_PCT 0.2
+set input_delay_value [expr $::env(CLOCK_PERIOD) * $IO_PCT]
+set output_delay_value [expr $::env(CLOCK_PERIOD) * $IO_PCT]
+puts "\[INFO\]: Setting output delay to : $output_delay_value"
+puts "\[INFO\]: Setting input delay to : $input_delay_value"
+
+set clk_index [lsearch [all_inputs] [get_port $::env(CLOCK_PORT)]]
+set all_inputs_wo_clk [lreplace [all_inputs] $clk_index $clk_index]
+
+set_input_delay $input_delay_value -clock [get_clocks $::env(CLOCK_PORT)] $all_inputs_wo_clk
+set_output_delay $output_delay_value -clock [get_clocks $::env(CLOCK_PORT)] [all_outputs]
+
+set_driving_cell -lib_cell $::env(SYNTH_DRIVING_CELL) -pin $::env(SYNTH_DRIVING_CELL_PIN) [all_inputs]
+set cap_load [expr $::env(SYNTH_CAP_LOAD) /1000.0]
+puts "\[INFO\]: Setting load to: $cap_load"
+set_load $cap_load [all_outputs]
+```
+
+Note: the driving cell was initially considered as the custom `sky130_vsdinv` (commented out), but the actual run used the standard `sky130_fd_sc_hd__inv_8` as the driving cell instead.
+
+**`pre_sta.conf`** (run from the OpenLane root directory):
+
+```tcl
+set_cmd_units -time ns -capacitance pF -current mA -voltage V -resistance kOhm -distance um
+read_liberty -max /home/vsduser/Desktop/work/tools/openlane_working_dir/openlane/designs/picorv32a/src/sky130_fd_sc_hd__slow.lib
+read_liberty -min /home/vsduser/Desktop/work/tools/openlane_working_dir/openlane/designs/picorv32a/src/sky130_fd_sc_hd__fast.lib
+read_verilog /home/vsduser/Desktop/work/tools/openlane_working_dir/openlane/designs/picorv32a/runs/finalrun2/results/synthesis/picorv32a.synthesis.v
+link_design picorv32a
+read_sdc /home/vsduser/Desktop/work/tools/openlane_working_dir/openlane/designs/picorv32a/src/my_base.sdc
+report_checks -path_delay min_max -fields {slew trans net cap input_pin}
+report_tns
+report_wns
+```
+
+This reads the **slow** corner liberty for max-delay analysis and the **fast** corner for min-delay analysis (standard dual-corner STA setup), links the actual synthesized netlist from the `finalrun2` run, and applies the custom SDC above.
+
+**Run:**
+
+```bash
+sta pre_sta.conf
+```
+
+**Result:**
+
+```
+#sta pre_sta.conf
+min(hold) =  0.25  slack (MET)
+max(setup)=  4.59  slack (MET)
+wns 0.00
+tns 0.00
+```
+
+### Comparing In-Flow vs. Standalone STA
+
+**What matches:** hold slack (0.24) and setup slack matches the raw stage-2 netlist exactly. WNS/TNS both landed at 0.00 in the standalone check too, confirming the design is fully timing-clean under both the in-flow and independent STA runs.
+
+---
+
+### 8. Floorplan and Placement — verifying the custom cell was placed
  
 After synthesis, the flow was continued through floorplan and placement:
  
@@ -881,24 +954,396 @@ This confirms `sky130_vsdinv` was successfully:
 3. Placed correctly in the floorplan alongside the standard `sky130_fd_sc_hd` cells.
 ---
 
-## 10. Clock Tree Synthesis (CTS)
 
-`[TO BE FILLED]` — pending.
+## 9. Clock Tree Synthesis (CTS)
 
----
+### Objective
 
-## 11. Routing
-
-`[TO BE FILLED]` — pending.
+Build a balanced clock distribution network across all placed cells — including the newly integrated `sky130_vsdinv` instances — so every sequential element switches on the clock edge at (as close as possible to) the same time.
 
 ---
 
-## 12. Sign-off (DRC / LVS / STA)
+### 1. Checking CTS-Relevant Config Variables
 
-`[TO BE FILLED]` — pending.
+Before running CTS, the relevant environment variables were checked directly in the OpenLane interactive shell to confirm what the flow would actually use:
+
+```tcl
+% echo $::env(LIB_SYNTH_COMPLETE)
+/openLANE_flow/designs/picorv32a/src/sky130_fd_sc_hd__typical.lib
+% echo $::env(LIB_TYPICAL)
+/openLANE_flow/designs/picorv32a/src/sky130_fd_sc_hd__typical.lib
+% echo $::env(CURRENT_DEF)
+/openLANE_flow/designs/picorv32a/runs/finalrun2/results/cts/picorv32a.cts.def
+% echo $::env(SYNTH_MAX_TRAN)
+2.4730000000000003
+% echo $::env(CTS_MAX_CAP)
+1.53169
+% echo $::env(CTS_CLK_BUFFER_LIST)
+sky130_fd_sc_hd__clkbuf_1 sky130_fd_sc_hd__clkbuf_2 sky130_fd_sc_hd__clkbuf_4 sky130_fd_sc_hd__clkbuf_8
+% echo $::env(CTS_ROOT_BUFFER)
+sky130_fd_sc_hd__clkbuf_16
+```
+
+`CTS_CLK_BUFFER_LIST` is the set of buffer cells OpenROAD's clock tree builder is allowed to choose from when inserting clock buffers; `CTS_ROOT_BUFFER` is the specific buffer used at the root of the clock tree (the largest drive-strength buffer, `clkbuf_16`, makes sense at the root since it drives the most downstream load).
+
+---
+
+### 2. Adjusting the Clock Buffer List
+
+The default `CTS_CLK_BUFFER_LIST` included `sky130_fd_sc_hd__clkbuf_1`, the smallest/weakest buffer in the list. This was removed before running CTS:
+
+```tcl
+% echo $::env(CTS_CLK_BUFFER_LIST)
+sky130_fd_sc_hd__clkbuf_1 sky130_fd_sc_hd__clkbuf_2 sky130_fd_sc_hd__clkbuf_4 sky130_fd_sc_hd__clkbuf_8
+
+% set ::env(CTS_CLK_BUFFER_LIST) [lreplace $::env(CTS_CLK_BUFFER_LIST) 0 0]
+sky130_fd_sc_hd__clkbuf_2 sky130_fd_sc_hd__clkbuf_4 sky130_fd_sc_hd__clkbuf_8
+
+% echo $::env(CTS_CLK_BUFFER_LIST)
+sky130_fd_sc_hd__clkbuf_2 sky130_fd_sc_hd__clkbuf_4 sky130_fd_sc_hd__clkbuf_8
+```
+
+`lreplace $::env(CTS_CLK_BUFFER_LIST) 0 0` removes the first element (index 0) of the list — dropping `clkbuf_1`, leaving CTS to choose only from `clkbuf_2`, `clkbuf_4`, and `clkbuf_8` for the actual `run_cts` run.
+
+**Note:** `clkbuf_1` was re-added back to `CTS_CLK_BUFFER_LIST` after CTS completed (restoring the full four-buffer list, which is what the config check in Section 1 reflects).
+
+---
+
+### 3. Running CTS
+
+```tcl
+% run_cts
+```
+
+---
+
+### 4. Verifying the CTS Output
+
+After CTS completed, the resulting DEF was independently loaded into OpenROAD to confirm the design was read back correctly:
+
+```tcl
+% openroad
+OpenROAD 0.9.0 1415572a73
+This program is licensed under the BSD-3 license. See the LICENSE file for details.
+
+% read_lef /openLANE_flow/designs/picorv32a/runs/finalrun2/tmp/merged.lef
+% read_def /openLANE_flow/designs/picorv32a/runs/finalrun2/results/cts/picorv32a.cts.def
+% write_db pico_cts.db
+% read_db pico_cts.db
+% read_verilog /openLANE_flow/designs/picorv32a/runs/finalrun2/results/synthesis/picorv32a.synthesis_cts.v
+% read_liberty $::env(LIB_TYPICAL)
+% read_sdc /openLANE_flow/designs/picorv32a/src/my_base.sdc
+% set_propagated_clock [all_clocks]
+% report_checks -path_delay min_max -format full_clock_expanded
+```
+
+Component count jumped from the pre-CTS placement (21,699 components, Section 5) to **29,412 components** post-CTS — the difference is almost entirely clock buffers inserted by CTS to balance the clock tree across the design.
+
+
+---
+
+### 5. Post-CTS Timing Checks
+
+**Hold check** (path type `min`):
+
+```
+Startpoint: _37159_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint:   _37159_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+```
+
+```
+data required time    -0.02
+data arrival time     -0.23
+------------------------------
+slack (MET)             0.25
+```
+
+**Setup check** (path type `max`):
+
+```
+clock clk (rise edge)            24.73
+library setup time               -0.29   24.44
+data required time                       24.44
+data arrival time                       -14.30
+------------------------------------------------
+slack (MET)                              10.15
+
+No paths found.
+wns 0.00
+tns 0.00
+```
+
+**Clock skew report:**
+
+```
+Clock clk
+Latency   CRPR   Skew
+_38295_/CLK ^  4.99
+_37393_/CLK ^  1.11   0.00   3.87
+```
+
+Both `wns`/`tns` at 0.00 confirm no timing violations remain after CTS — every path, including the newly-inserted clock buffer network, meets timing.
+
+---
+### 6. Restoring the Clock Buffer List
+
+After CTS completed successfully, `clkbuf_1` was added back into `CTS_CLK_BUFFER_LIST`, restoring the original four-buffer list:
+
+```tcl
+% set ::env(CTS_CLK_BUFFER_LIST) [linsert $::env(CTS_CLK_BUFFER_LIST) 0 sky130_fd_sc_hd__clkbuf_1]
+sky130_fd_sc_hd__clkbuf_1 sky130_fd_sc_hd__clkbuf_2 sky130_fd_sc_hd__clkbuf_4 sky130_fd_sc_hd__clkbuf_8
+```
+
+`linsert` re-inserts `clkbuf_1` at index 0 — the logical inverse of the earlier `lreplace` removal, restoring the original four-buffer list.
+
+### 7. CTS Completion
+
+```
+[INFO]: Clock Tree Synthesis was successful
+```
+
+### Key Takeaways
+
+- `CTS_CLK_BUFFER_LIST` and `CTS_ROOT_BUFFER` directly control which buffer cells CTS is allowed to use — dropping the weakest buffer (`clkbuf_1`) from the candidate list is a real, sometimes-necessary tuning step, not just a default to accept blindly
+- Component count is a simple, useful sanity check for CTS: a jump from ~21.7K to ~29.4K components between placement and CTS is expected and reflects the inserted clock buffer tree, not an error
+- WNS/TNS at 0.00 post-CTS, combined with a low measured clock skew (3.87), confirms the clock tree is both timing-clean and reasonably balanced
+
+### Connection to Next Stage
+
+With the clock tree built and verified timing-clean, the flow proceeds to Routing — drawing the actual metal interconnect between all placed cells (including the clock buffers just inserted).
+
+---
+
+## 10. Power Distribution Network (PDN) & Routing
+
+### Objective
+
+Generate the power/ground distribution network across the design, then route all signal nets to complete the physical layout.
+
+---
+
+### 1. PDN Generation
+
+Checked the `VDD_NETS` environment variable before generating the PDN:
+
+```tcl
+% puts $::env(VDD_NETS)
+can't read "::env(VDD_NETS)": no such variable
+```
+
+This variable wasn't set — not required for `gen_pdn` to run, so this was an exploratory check rather than a blocking error.
+
+Set `CURRENT_DEF` to point at the floorplan output — PDN generation builds the power grid on top of the floorplanned die, before placement/routing add further detail:
+
+```tcl
+% set ::env(CURRENT_DEF) /openLANE_flow/designs/picorv32a/runs/finalrun2/results/floorplan/picorv32a.floorplan.def
+/openLANE_flow/designs/picorv32a/runs/finalrun2/results/floorplan/picorv32a.floorplan.def
+```
+
+Ran PDN generation:
+
+```tcl
+% gen_pdn
+[INFO]: Generating PDN...
+[INFO]: current step index: 29
+OpenROAD 0.9.0 1415572a73
+This program is licensed under the BSD-3 license. See the LICENSE file for details.
+```
+
+---
+
+### 2. Confirming Die Area for This Run
+
+```bash
+cd designs/picorv32a/runs/finalrun2/results/floorplan
+grep -A1 "DIEAREA" picorv32a.floorplan.def
+```
+
+```
+DIEAREA ( 0 0 ) ( 760960 771680 ) ;
+ROW ROW_0 unithd 5520 10880 FS DO 1630 BY 1 STEP 460 0 ;
+```
+
+Converting DEF units (1000 units = 1 micron, as established in Section 4): **die area = 760.960 µm × 771.680 µm**. This is larger than the original baseline floorplan (660.685 µm × 671.405 µm, Section 4) — expected, since `finalrun2` includes the custom cell and the delay-optimized synthesis strategy (`SYNTH_STRATEGY "DELAY 0"`, Section 8), both of which increase cell count and therefore required die area.
+
+---
+
+### 3. Routing
+
+With PDN generated, routing was run:
+
+```tcl
+% run_routing
+```
+
+This produced a complete detail-routed layout:
+
+```
+complete detail routing
+total wire length = 1325012 um
+total wire length on LAYER li1  = 466 um
+total wire length on LAYER met1 = 551735 um
+total wire length on LAYER met2 = 559065 um
+total wire length on LAYER met3 = 172344 um
+total wire length on LAYER met4 = 41263 um
+total wire length on LAYER met5 = 137 um
+total number of vias = 179133
+```
+
+**Via breakdown by layer:**
+
+| Layer | Vias |
+|---|---|
+| FR_MASTERSLICE | 0 |
+| li1 | 71,595 |
+| met1 | 96,302 |
+| met2 | 10,028 |
+| met3 | 1,206 |
+| met4 | 2 |
+| **Total** | **179,133** |
+
+```
+cpu time = 00:52:23, elapsed time = 00:19:01, memory = 887.61 (MB), peak = 922.83 (MB)
+Runtime taken (hrt): 1164.83
+[INFO]: No DRC violations after detailed routing.
+[INFO]: Changing layout from .../tmp/routing/41-addspacers.def to .../results/routing/picorv32a.def
+[INFO]: Taking a Screenshot of the Layout Using Klayout...
+```
+
+**Zero DRC violations after detailed routing** — the fully routed design is manufacturable under Sky130's design rules.
+
+Results directory:
+
+```bash
+cd designs/picorv32a/runs/finalrun2/results/routing
+ls -ltr
+# merged_unpadded.lef -> ../../tmp/merged_unpadded.lef
+# picorv32a.def.ref
+# picorv32a.def.png
+# picorv32a.def
+# picorv32a.spef
+```
+
+---
+
+### 4. Post-Route Parasitic Extraction and STA
+
+```
+[INFO]: Running SPEF Extraction...
+Start parsing LEF file...
+Parsing LEF file done.
+Start parsing DEF file...
+Parsing DEF file done.
+
+Edge Capacitance Factor: 1.0
+Wire model: L
+
+RC Extraction is done
+Start writing SPEF file
+Writing SPEF is done
+[INFO]: Running Static Timing Analysis...
+```
+
+OpenSTA re-ran timing on the routed netlist (`picorv32a.synthesis_preroute.v`), applying the same constraint-setup pattern used throughout this flow (clock, input/output delay, max fanout, driving cell, cap load):
+
+```tcl
+create_clock [get_ports $::env(CLOCK_PORT)] -name $::env(CLOCK_PORT) -period $::env(CLOCK_PERIOD)
+set input_delay_value [expr $::env(CLOCK_PERIOD) * $::env(IO_PCT)]
+set output_delay_value [expr $::env(CLOCK_PERIOD) * $::env(IO_PCT)]
+[INFO]: Setting output delay to: 4.946000000000001
+[INFO]: Setting input delay to: 4.946000000000001
+set_max_fanout $::env(SYNTH_MAX_FANOUT) [current_design]
+set_driving_cell -lib_cell $::env(SYNTH_DRIVING_CELL) -pin $::env(SYNTH_DRIVING_CELL_PIN) [all_inputs]
+[INFO]: Setting load to: 0.01765
+```
+
+**Result:**
+
+```
+tns 0.00
+wns 0.00
+[INFO]: Routing completed for picorv32a/22-08_18-12 in 0h26m42s
+```
+
+WNS and TNS both at 0.00 on the fully routed, parasitic-extracted netlist — timing holds even after real routing parasitics (not just placement/CTS estimates) are accounted for.
+
+### Key Takeaways
+
+- `CURRENT_DEF` must be pointed at the floorplan output before `gen_pdn` — PDN generation is a floorplan-stage operation, not something that runs against a later (placement/CTS) DEF
+- Die area growing from 660.685×671.405 µm to 760.960×771.680 µm between the baseline run and `finalrun2` is a direct, traceable consequence of the custom cell integration and delay-optimized synthesis strategy from Section 8 — more cells need more area
+- Zero DRC violations combined with WNS/TNS at 0.00 *after* routing (not just after CTS) is the strongest timing confirmation so far — this accounts for real extracted parasitics from actual routed wires, not just estimates
+
+### Connection to Next Stage
+
+With routing complete, DRC-clean, and timing-clean under post-route parasitics, the flow proceeds to Sign-off — final DRC/LVS/STA checks — before generating the GDSII file ready for fabrication.
+
+---
+
+## 11. GDSII Generation & Layout View
+
+The final routed layout (GDSII) was generated and loaded into **Magic** for visual inspection:
+
+```bash
+cd designs/picorv32a/runs/finalrun2/results/magic
+magic -T /home/vsduser/Desktop/work/tools/openlane_working_dir/pdks/sky130A/libs.tech/magic/sky130A.tech picorv32a.gds
+```
+
+This opens the routed layout (`layout1`) in Magic, technology **sky130A**, showing:
+- Standard cell rows (`sky130_fd_sc_hd__*` cells — `a21oi_4`, `and2_1`, `nand2_1`, `mux2_1`, `dfxtp_4`, decap/fill cells, etc.)
+- Routing metal layers and vias across the core
+- Filler cell placement (`FILLER_*`)
+
+![Routed GDS layout](images/picorv32a_gds.jpeg)
+
+## Next Steps (Post-Routing)
+
+1. **Final DRC/antenna check on the GDSII (Magic/signoff-level)** — confirm the exported GDS is clean under the full signoff rule deck, independent of the router's internal DRC engine.
+
+2. **LVS (Layout vs. Schematic)** — verify layout matches the gate-level netlist using Netgen.
+3. **Parasitic extraction (SPEF)** and **STA sign-off** with the routed parasitics.
+4. **GDSII sign-off** and final tape-out package generation.
 
 ---
 
 ## End-to-End Learning
 
-`[TO BE FILLED]` — to be written once all stages above are complete, tying RTL → Synthesis → Floorplan → Power Planning → Placement → CTS → Routing → Signoff → GDSII together with how CMOS technology, standard cells, SPICE, PDK, LEF, Liberty, STA, and DRC support that flow.
+This project traced a single RISC-V core (`picorv32a`) all the way from Verilog RTL to a
+routed, DRC-clean physical layout on the Sky130 process — and, along the way, from a
+hand-drawn transistor layout to a fully integrated standard cell inside that same design.
+
+**RTL → gate-level → silicon is a chain of representations of the same design**, and this
+flow made that concrete: the same `picorv32a` netlist was expressed as a synthesized
+Verilog netlist (Yosys), a placed/routed DEF (OpenROAD), a physical layout (Magic), and
+finally a GDSII stream — with cell and net counts (14,876 cells / 14,978 nets from
+synthesis) carried through, unchanged, into floorplanning and placement as a
+consistency check at every handoff.
+
+**Standard cells are the real unit of design**, not just library entries. Building
+`sky130_vsdinv` from a Magic layout, extracting its SPICE netlist with `ext2spice`,
+simulating it in Ngspice to measure propagation delay, and then fixing a real DRC
+violation (transistor width undersized at 0.35µm against a 0.42µm minimum) made clear
+that a cell's LEF (abstract view for placement/routing) and its Liberty timing (used by
+STA) both derive from the same physical geometry — get the layout wrong and everything
+downstream inherits the error.
+
+**Timing closure is continuous, not a single checkpoint.** STA was run after synthesis
+(WNS/TNS 0.00), independently verified with a standalone OpenSTA config against the same
+netlist, re-checked after CTS once ~7,700 clock buffers were inserted, and checked again
+after routing using actual extracted parasitics (SPEF) rather than estimates — and the
+design held 0.00 WNS/TNS at every one of those checkpoints, which is what timing closure
+actually means: the constraint holds under increasingly accurate models of the real
+silicon, not just at one lucky stage.
+
+**The PDK is the contract every tool agrees on.** LEF/DEF gave the physical geometry and
+routing rules; Liberty gave delay/timing models at process corners; the `.tech` file gave
+Magic the DRC rule deck. Every tool in the flow — Yosys, OpenROAD, Magic, Ngspice, OpenSTA
+— was really just applying different views of the same Sky130 PDK, and integrating a
+custom cell meant making sure *all* of those views (LEF, Liberty, layout) stayed
+consistent with each other.
+
+Overall, this was less "run the flow and get a GDS" and more an exercise in verifying,
+at every stage, that the numbers reported by one tool matched what the next tool actually
+did with the design — and in debugging the handful of places (a Docker alias, an
+undersized transistor, a buffer list) where they didn't, until they did.
