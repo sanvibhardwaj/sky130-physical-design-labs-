@@ -329,6 +329,26 @@ Zoomed into a single placed cell and queried it via the tkcon console `what` com
 Selected subcell(s)
     Instance "PHY_3451" of cell "sky130_fd_sc_hd__tapvpwrvgnd_1"
 ```
+### Why No Macro Placement Was Needed Here
+
+`picorv32a` is a pure standard-cell design — it has no macros (no SRAM blocks, PLLs, or other
+large IP) instantiated in its RTL. This is why the floorplan step never needed pre-placed-cell
+handling.
+
+Macros differ from standard cells in a few concrete ways:
+- **Size and shape are fixed and large** — a macro (e.g. an SRAM block) can be thousands of times
+  the area of a single standard cell, and its internal layout is generated separately, not built
+  from library cells.
+- **Macros must be placed *before* standard-cell placement runs** — the placer treats a macro as
+  a fixed obstruction and arranges standard cells around it, rather than placing it freely like a
+  `sky130_fd_sc_hd__*` cell.
+- **Macros need dedicated spacing (keep-out margins)** for power routing and blockage rules, since
+  their pin locations and power/ground rails are fixed by their own internal design, not generated
+  by the flow's automatic power planning.
+
+Since `picorv32a` has none of these, `FP_CORE_UTIL`, `FP_ASPECT_RATIO`, and the rest of the
+floorplan variables (Section 4) applied directly to a pure standard-cell layout with no macro
+pre-placement step required.
 
 **6. Result**
 
@@ -1087,6 +1107,23 @@ _37393_/CLK ^  1.11   0.00   3.87
 Both `wns`/`tns` at 0.00 confirm no timing violations remain after CTS — every path, including the newly-inserted clock buffer network, meets timing.
 
 ---
+
+### Pre-CTS vs. Post-CTS Observations
+
+| Metric | Pre-CTS (Placement) | Post-CTS |
+|---|---|---|
+| Component count | 21,699 | 29,412 |
+| Clock model | Ideal (zero-delay) clock — every flop assumed to switch at exactly the same instant | Propagated clock — actual buffer delay and skew now included |
+| Clock skew | Not modeled | 3.87 (measured, Section 9.5) |
+
+The ~7,700-component jump is almost entirely the clock buffers CTS inserted (`CTS_CLK_BUFFER_LIST`:
+`clkbuf_2`, `clkbuf_4`, `clkbuf_8` during the run). This is also *why* pre-CTS and post-CTS timing
+checks aren't directly comparable on slack alone — pre-CTS STA assumes an ideal clock with zero
+network delay, while post-CTS STA (Section 9.5) uses `set_propagated_clock`, meaning the actual
+buffer-tree delay and skew are now part of the timing calculation. Bigger/more clock buffers
+generally *improve* setup slack (they help all flops switch closer together) but can *reduce* hold
+slack margin, since added buffer delay changes the relative timing between launch and capture flops.
+
 ### 6. Restoring the Clock Buffer List
 
 After CTS completed successfully, `clkbuf_1` was added back into `CTS_CLK_BUFFER_LIST`, restoring the original four-buffer list:
@@ -1123,6 +1160,14 @@ With the clock tree built and verified timing-clean, the flow proceeds to Routin
 Generate the power/ground distribution network across the design, then route all signal nets to complete the physical layout.
 
 ---
+### Why PDN Must Exist Before Routing
+
+Routing needs the power and ground rails already in place so it can route signal nets *around*
+them without conflicts — the power grid occupies fixed metal-layer resources (Section 10's
+`FP_PDN_LOWER_LAYER`/`UPPER_LAYER`, met4/met5) that the signal router must treat as fixed
+obstructions, not something it can route through. Just as importantly, every standard cell needs
+a valid power connection before the design can be considered complete for signoff — a fully routed
+design with no PDN would have no way to actually deliver power to the logic it just connected.
 
 ### 1. PDN Generation
 
