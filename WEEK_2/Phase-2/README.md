@@ -3,16 +3,16 @@
 Studied `.devcontainer/Dockerfile` and `.devcontainer/install-openroad.sh` to understand what tools power the flow, where they come from, and how the flow itself is orchestrated end to end.
 
 ---
-# Task 2.1: Toolchain Mapping (Devcontainer Deep Dive)
+## Task 2.1: Toolchain Mapping (Devcontainer Deep Dive)
 
-## Objective
+### Objective
 Study `.devcontainer/Dockerfile` and `.devcontainer/install-openroad.sh` to identify every major tool used in the RTL-to-GDS flow, where each one comes from, and what stage of the flow it serves.
 
-## Files Studied
+### Files Studied
 - `.devcontainer/Dockerfile`
 - `.devcontainer/install-openroad.sh`
 
-## Toolchain Table
+### Toolchain Table
 
 | Tool | Installed From | Purpose in Flow | Stage Used |
 |---|---|---|---|
@@ -26,7 +26,7 @@ Study `.devcontainer/Dockerfile` and `.devcontainer/install-openroad.sh` to iden
 | **Make** | `apt` package manager | Build automation — runs Makefile targets that invoke the flow | Environment setup / flow invocation |
 | **Git** | `apt` package manager (`git`, `git-lfs`) | Version control — clones repos, pulls large tracked files via LFS | Environment setup |
 
-## Key Observations
+### Key Observations
 
 **Install pattern:** Every tool in this setup is installed as a prebuilt binary or package — nothing is compiled from source. OpenROAD comes from a custom CDN, Yosys from OSS CAD Suite's GitHub releases, KLayout as a `.deb`, and the rest via `apt`. This keeps container build time fast, but it makes the setup dependent on those external URLs staying live and unchanged.
 
@@ -34,16 +34,16 @@ Study `.devcontainer/Dockerfile` and `.devcontainer/install-openroad.sh` to iden
 
 **Fragility risk:** This same "external URL dependency" pattern caused the `efabless/openlane:current` Docker tag issue debugged on Day 1 — a reminder that prebuilt-binary pipelines trade build speed for a dependency on third-party hosting staying available.
 
-## Key Takeaway
+### Key Takeaway
 Understanding where each tool comes from isn't just bookkeeping — it explains why the environment behaves the way it does. Knowing that OpenROAD's CTS/routing/STA capabilities are bundled (not separate tools) clarifies why a single `openroad` command handles multiple flow stages, and knowing the install sources helps debug future "tool not found" or version-mismatch issues by pointing straight to where a tool actually came from.
 
 ---
-# Task 2.2: Flow Architecture Explanation
+## Task 2.2: Flow Architecture Explanation
 
-## Objective
+### Objective
 Explaining , in my own words, how OpenROAD-flow-scripts (ORFS) automates the RTL-to-GDSII flow — what it automates, how the Makefiles orchestrate it, where synthesis hands off to physical design, where timing is checked, and where the final GDS is produced.
 
-## Structured Explanation
+### Structured Explanation
 
 ### 1. What ORFS automates
 Before I understood ORFS, I thought each PD stage (synthesis, floorplan, placement, CTS, routing) had to be run as a separate manual step, feeding the output of one tool into the next by hand.Instead of manually running every tool and stage, ORFS provides scripts and Makefiles that coordinate the different steps. ORFS basically removes that manual handoff.The flow starts with an RTL design and automatically takes it through synthesis, floorplanning, placement, clock tree synthesis, routing, timing analysis, and finally GDS generation.
@@ -68,5 +68,5 @@ OpenSTA is the engine performing all of these checks, and it's this progression 
 ### 5. Where GDS is produced
 The GDSII file — the actual manufacturable mask layout — is generated at the very end of the flow, after routing is complete and the design has passed DRC (design rule checks) and LVS (layout-vs-schematic) clean. This final step is a "stream-out," where the routed layout is written into the GDSII format that a fab can actually use to produce photomasks. Everything before this point (synthesis, placement, CTS, routing) builds toward this file; nothing downstream of GDS generation modifies the design further — it's the final deliverable of the flow.
 
-## Key Takeaway
+### Key Takeaway
 ORFS isn't just a script that runs tools back-to-back — it's a dependency-driven pipeline where each stage's Makefile target both depends on and validates the previous stage's output, and timing is treated as a continuously-refined check rather than a single gate at the end. Understanding this structure makes it much easier to debug: if a `make` target fails, the fix usually lies in the stage just before it, not in the target itself.
