@@ -684,7 +684,7 @@ DRC-clean — the symmetric growth resolved the width violation without introduc
 - DRC must be re-checked against the whole cell after any edit, not just the local region that was changed
 ---
 
-## Integrating a Custom Standard Cell (sky130_vsdinv) into the OpenLane Flow — picorv32a
+## 8. Integrating a Custom Standard Cell (sky130_vsdinv) into the OpenLane Flow — picorv32a
  
 ### Objective 
  
@@ -939,7 +939,7 @@ tns 0.00
 
 ### Comparing In-Flow vs. Standalone STA
 
-**What matches:** hold slack (0.24) and setup slack matches the raw stage-2 netlist exactly. WNS/TNS both landed at 0.00 in the standalone check too, confirming the design is fully timing-clean under both the in-flow and independent STA runs.
+**What matches:** hold slack (0.25) and setup slack (4.59) from this standalone check match the in-flow stage-12 results (Section 8.6)exactly. WNS/TNS both landed at 0.00 here too, confirming the design is fully timing-clean under both the in-flow and independent STA runs.
 
 ---
 
