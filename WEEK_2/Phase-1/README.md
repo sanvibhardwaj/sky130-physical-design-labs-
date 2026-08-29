@@ -30,7 +30,7 @@ yosys -V
 python3 --version
 make --version
 ```
-![Tool Versions](WEEK_2\Phase-1\images/02_tool_versions.png)
+![Tool Versions](images/02_tool_versions.png)
 
 ---
 
@@ -61,25 +61,25 @@ make --version
 **Evidence screenshots:**
 
 #### Synthesis Completion Proof
-![Synthesis Completion](./screenshots/03_synthesis_completion.png)
+![Synthesis Completion](images/03_synthesis_completion.png)
 
 #### Floorplan Stage Log Snippet
-![Floorplan Log](./screenshots/04_floorplan_log.png)
+![Floorplan Log](images/04_floorplan_log.png)
 
 #### Placement Completion Proof
-![Placement Completion](./screenshots/05_placement_completion.png)
+![Placement Completion](images/05_placement_completion.png)
 
 #### CTS Log Snippet
-![CTS Log](./screenshots/06_cts_log.png)
+![CTS Log](images/06_cts_log.png)
 
 #### Routing Completion Proof
-![Routing Completion](./screenshots/07_routing_completion.png)
+![Routing Completion](images/07_routing_completion.png)
 
 #### Final GDS Generation Proof
-![Final GDS Proof](./screenshots/08_final_gds_proof.png)
+![Final GDS Proof](images/08_final_gds_proof.png)
 
 #### Final Timing Report Snippet (WNS/TNS)
-![Timing Report](./screenshots/09_timing_report.png)
+![Timing Report](images/09_timing_report.png)
 
 ---
 
