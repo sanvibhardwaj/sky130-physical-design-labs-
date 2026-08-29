@@ -21,7 +21,7 @@ This document records the execution of the OpenROAD RTL-to-GDS flow inside GitHu
 **Evidence:**
 
 #### Screenshot — Devcontainer Build Success
-![Devcontainer Build](WEEK_2\Phase-1\images/devcontainer_build.png)
+![Devcontainer Build](images/devcontainer_build.png)
 
 #### Screenshot — Tool Version Checks
 ```bash
