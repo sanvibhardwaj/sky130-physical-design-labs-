@@ -62,7 +62,7 @@ iverilog -o /tmp/gls_check.vvp \
 
 **Result:** `COMPILE OK` – no missing modules or syntax errors.
 
-![Dependency check and compile test](images/phase1_compile_ok.png)
+![Dependency check and compile test](images/phase1_compile_ok.jpeg)
 
 ## Summary
 
